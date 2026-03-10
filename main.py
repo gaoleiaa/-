@@ -2,8 +2,7 @@
 import pickle
 import streamlit as st
 import matplotlib.pyplot as plt 
-plt.rcParams['font.sans-serif'] = ['Microsoft Yahei']
-plt.rcParams['axes.unicode_minus'] = False
+
 import shap
 from datetime import datetime
 import pandas as pd
@@ -11,14 +10,22 @@ import numpy as np
 import seaborn as sns
 from utils import *
 import warnings
-warnings.filterwarnings("ignore")
 from Cindex import *
 from sklearn.metrics import roc_auc_score,confusion_matrix
 import numpy as np
+from matplotlib import font_manager
+
 
 
 COX_MODEL_PATH = "./cox_model.pkl"
 SHAP_MODEL_PATH = "./shap_model.pkl" 
+FONT_PATH="msyh.ttc"
+
+font_manager.fontManager.addfont(FONT_PATH)
+plt.rcParams['font.sans-serif'] = ['Microsoft Yahei']
+plt.rcParams['axes.unicode_minus'] = False
+
+warnings.filterwarnings("ignore")
 
 class Config():
     def __init__(self,cox_model_path,shap_model_path,
