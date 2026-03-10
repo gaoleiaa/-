@@ -2,8 +2,8 @@
 import pickle
 import streamlit as st
 import matplotlib.pyplot as plt 
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['axes.unicode_minus'] = False 
+plt.rcParams['font.sans-serif'] = ['Microsoft Yahei']
+plt.rcParams['axes.unicode_minus'] = False
 import shap
 from datetime import datetime
 import pandas as pd
@@ -23,12 +23,12 @@ SHAP_MODEL_PATH = "./shap_model.pkl"
 class Config():
     def __init__(self,cox_model_path,shap_model_path,
                  cox_feature_list=["腹膜转移评分二分","cN分期","肝脏转移","腹水分级","治疗方式1","治疗方式2"],
-                 shap_feature_list=["腹膜转移评分二分","cN分期","肝脏转移","腹水分级","治疗方式"],
-                 threshold={"risks":0.05,"peritoneal_metastasis_score":1}):
+                 shap_feature_list=['治疗方式', 'cN分期', '腹水分级', '腹膜转移评分二分', '肝脏转移'],
+                 threshold={"risks":1.204556,"peritoneal_metastasis_score":1,1:None,2:None,3:None,4:None,5:None}):
         self.cox_model=pickle.load(open(cox_model_path,'rb'))
         self.shap_model=pickle.load(open(shap_model_path,'rb'))
         self.threshold=threshold
-        self.time_unit_map= {"天": 1, "月": 30, "年": 365}
+        self.time_unit_map= {"天": 1, "月": 30, "年": 365.25}
         self.cox_feature_list=cox_feature_list
         self.shap_feature_list=shap_feature_list
     
@@ -86,18 +86,18 @@ def render_model_metric_analysis(c,df):
         df["RISKS_GROUP"]=df["RISKS"].map(lambda x:"低危组" if x<c.threshold["risks"] else "高危组")
 
 
-        cindex=computeC(df[time_column],df[event_column],1-df["RISKS"],confidence_level)
+        cindex=computeC(df[time_column],df[event_column],1-df["RISKS"],confidence_level*100)
         # high_risk_group_
                 
         st.markdown("---")
         st.markdown("模型在给定数据上效果")
         col1,col2,col3=st.columns(3)
         with col1:
-            st.metric("C指数",cindex["cindex"])
+            st.metric("C指数",round(cindex["cindex"],4))
         with col2:
-            st.metric("C指数下限",cindex["cindex_lower"])
+            st.metric("C指数下限",round(cindex["cindex_lower"],4))
         with col3:
-            st.metric("C指数上限",cindex["cindex_upper"])
+            st.metric("C指数上限",round(cindex["cindex_upper"],4))
 
 
         fig=get_group_km_curve(df, event_column, time_column, "RISKS_GROUP",confidence_level,
@@ -120,7 +120,7 @@ def render_model_metric_analysis(c,df):
 
             prob,true=get_cox_rel_at_timepoint(df,event_column,time_column,time_days,c.cox_model,feature_col_list=None)
 
-            render_classify_table(prob,true)
+            render_classify_table(prob,true,threshold=c.threshold.get(int(time_year),None))
             render_classify_plot(prob,true)
 
 
@@ -153,8 +153,8 @@ def render_classify_table(prob,true,threshold=None):
     totoal_n=len(pred)
     ppv=tp/(tp+fp)
     npv=tn/(fn+tn)
-    f1score=2*sensitivity*specificity/(sensitivity+specificity)
-    auc=roc_auc_score(true,pred)
+    f1score=2*sensitivity*ppv/(sensitivity+ppv)
+    auc=roc_auc_score(true,prob)
     acc=(tp+tn)/totoal_n
     st.markdown("---")
     st.markdown("#### 评估指标")
@@ -162,11 +162,11 @@ def render_classify_table(prob,true,threshold=None):
     with col1:
         st.metric("样本总数",value=totoal_n)
     with col2:
-        st.metric("准确率",value=acc)
+        st.metric("准确率",value=round(acc,4))
     with col3:
-        st.metric("AUC值",value=auc)
+        st.metric("AUC值",value=round(auc,4))
     with col4:
-        st.metric("F1score",value=f1score)
+        st.metric("F1score",value=round(f1score,4))
 
     col1,col2,col3,col4=st.columns(4)
     with col1:
@@ -180,13 +180,13 @@ def render_classify_table(prob,true,threshold=None):
 
     col1,col2,col3,col4=st.columns(4)
     with col1:
-        st.metric("敏感度",value=sensitivity)
+        st.metric("敏感度",value=round(sensitivity,4))
     with col2:
-        st.metric("特异度",value=specificity)
+        st.metric("特异度",value=round(specificity,4))
     with col3:
-        st.metric("阳性预测值",value=ppv)
+        st.metric("阳性预测值",value=round(ppv,4))
     with col4:
-        st.metric("阴性预测值",value=npv)
+        st.metric("阴性预测值",value=round(npv,4))
 
 
 
@@ -280,10 +280,13 @@ def get_group_shap_fig_heatmap(shap_values,df):
     sns.heatmap(shap_df,cmap="coolwarm")
     return fig
 
+
+
 def get_group_shap_fig_onecase(shap_values,case_id):
     fig, ax = plt.subplots(figsize=(12, 8))
     shap.plots.waterfall(shap_values[int(case_id.split("_")[0]), :], max_display=20, show=False)
     plt.tight_layout()
+    fig=plt.gcf()
     return fig  
 
 def render_shap_analysis(c, df):
@@ -311,7 +314,7 @@ def render_shap_analysis(c, df):
         with st.spinner("正在计算SHAP值..."):
             dft = df[c.shap_feature_list]
             shap_values,shap_df = get_group_shap_values(dft)
-            shap_df[st.session_state.id_col]=df[st.session_state.id_col]
+            shap_df[st.session_state.id_col]=np.array(df[st.session_state.id_col])
         # 提供下载
         st.markdown("---")
         st.markdown("#### SHAP数值")
@@ -368,17 +371,29 @@ def get_case_survival(feature_dic={}):
     case_df=case_df.style.format({"预测存活概率":"{:.3e}"})
     return fig, case_df
 
-def get_case_shap(feature_dic={}):
+def get_case_shap_waterfall(shap_values):
     """生成单个病例的SHAP分析"""
-    feature_df = pd.DataFrame([feature_dic])
-    feature_df=trans_df_data(feature_df)
-    feature_df=feature_df[c.shap_feature_list]
-    shap_values = c.shap_model(feature_df)
+    fig, ax = plt.subplots(figsize=(12, 8))
     shap.plots.waterfall(shap_values[0, :], max_display=20, show=False) 
     
     fig = plt.gcf()
     return fig
 
+
+
+
+def get_case_shap_force(shap_values):
+    # fig, ax = plt.subplots(figsize=(12, 8))
+    shap.plots.force(shap_values.base_values[0],shap_values.values[0,:],features=np.round(shap_values.data[0,:],3),feature_names=shap_values.feature_names,matplotlib=True,text_rotation=0,show=False)
+    plt.tight_layout()
+    fig=plt.gcf()
+    return fig  
+
+def get_case_shap_bar(shap_values):
+    fig, ax = plt.subplots(figsize=(12, 8))
+    shap.bar_plot(shap_values.values[0, :],feature_names=shap_values.feature_names,show=False)
+    plt.tight_layout()
+    return fig  
 
 def trans_df_data(df):
     df["治疗方式1"]= (df["治疗方式"] == 1).map(int)
@@ -401,7 +416,7 @@ def get_case_metrics(feature_dic,time_unit,time_points_list):
         time_points_list_days=[float(x)*c.time_unit_map[time_unit] for x in time_points_list]
         for i,time_point in enumerate(time_points_list_days):
             survival_prob = c.cox_model.predict_survival_function(feature_df, times=time_point).iloc[0, 0]
-            rel[time_points_list[i]] = survival_prob
+            rel[f"{time_points_list[i]}年生存概率"] = survival_prob
         return rel
 
 
@@ -588,12 +603,6 @@ def render_case_analysis():
     
     st.header("🔍 Case 分析")
     
-    # 重置按钮
-    if st.session_state.case_submitter:
-        if st.button("🔄 开始新分析", type="secondary", width="content"):
-            st.session_state.case_submitter = False
-            st.rerun()
-    
     st.markdown("---")
     
     # 输入表单
@@ -614,12 +623,12 @@ def render_case_analysis():
             
             with col_indic1:
                 treatment_method = st.number_input("治疗方式", min_value=1, max_value=3, value=1, step=1)
-                ascites_grading = st.number_input("腹水分级", min_value=1, max_value=3, value=2, step=1)
-                liver_metastasis = st.number_input("肝脏转移", min_value=0, max_value=1, value=1, step=1)
+                ascites_grading = st.number_input("腹水分级", min_value=1, max_value=3, value=1, step=1)
+                liver_metastasis = st.number_input("肝脏转移", min_value=0, max_value=1, value=0, step=1)
                 
             with col_indic2:
-                peritoneal_metastasis_score = st.number_input("腹膜转移评分", min_value=0, max_value=10, step=1, value=5)
-                cn_stage = st.number_input("cN分期", min_value=0, value=2)
+                peritoneal_metastasis_score = st.number_input("腹膜转移评分", min_value=0, max_value=10, step=1, value=0)
+                cn_stage = st.number_input("cN分期", min_value=0,max_value=3, value=0)
             
             # 时间设置
             st.markdown("#### 要计算的时间")
@@ -676,9 +685,15 @@ def render_case_analysis():
         st.session_state.case_submitter = True
         st.session_state.case_feature_dic={"治疗方式":treatment_method,"腹水分级":ascites_grading,"腹膜转移评分":peritoneal_metastasis_score,"cN分期":cn_stage,"肝脏转移":liver_metastasis}
     # 结果显示区域
+
     if st.session_state.case_submitter:
+        if st.button("🔄 开始新分析", type="secondary", width="content"):
+            st.session_state.case_submitter = False
+            st.rerun()
         st.markdown("---")
         results=get_case_metrics(feature_dic=st.session_state.case_feature_dic,time_unit=time_unit,time_points_list=time_points_list)
+        results["case_id"]=case_id
+        results["分析时间"]=analysis_date
         # 显示核心结果
         st.subheader("📊 分析结果")
 
@@ -702,7 +717,7 @@ def render_case_analysis():
             with cols_probs[i]:
                 st.metric(
                     f"{time_point}{time_unit}生存概率",
-                    f"{results[time_point]:.2%}"
+                    f"{results[f'{time_point}年生存概率']:.2%}"
                 )
         
         # 下载分析结果
@@ -728,10 +743,26 @@ def render_case_analysis():
         # SHAP分析
         st.markdown("---")
         st.subheader("🔍 特征SHAP分析")
-        
-        shap_fig =get_case_shap(st.session_state.case_feature_dic)
-        
-        render_fig(shap_fig)
+
+
+        feature_df = pd.DataFrame([st.session_state.case_feature_dic])
+        feature_df=trans_df_data(feature_df)
+        feature_df=feature_df[c.shap_feature_list]
+        shap_values = c.shap_model(feature_df)
+        shap_fig_waterfall =get_case_shap_waterfall(shap_values)
+        shap_fig_force =get_case_shap_force(shap_values)
+        shap_fig_bar=get_case_shap_bar(shap_values)
+        st.markdown("#### case分析瀑布图")
+        st.markdown("---")
+        render_fig(shap_fig_waterfall)
+
+        st.markdown("#### case分析力图")
+        st.markdown("---")
+        render_fig(shap_fig_force)
+
+        st.markdown("#### case分析柱状图")
+        st.markdown("---")
+        render_fig(shap_fig_bar)
         
         # 生存曲线分析
         st.markdown("---")
@@ -1029,7 +1060,7 @@ def render_km_analysis(c, df):
                 if_p=False if var_column is None else True,
                 if_table=True,)
             st.markdown("---")
-            st.markdown(f"KM曲线{var_column}")
+            st.markdown(f"KM曲线_{var_column if not var_column is None else '全部'}")
             render_fig(fig)
  
         st.markdown("---")
