@@ -19,7 +19,7 @@ from matplotlib import font_manager
 
 COX_MODEL_PATH = "./cox_model.pkl"
 SHAP_MODEL_PATH = "./shap_model.pkl" 
-FONT_PATH="msyh.ttc"
+FONT_PATH="msyh.ttf"
 
 font_manager.fontManager.addfont(FONT_PATH)
 plt.rcParams['font.sans-serif'] = ['Microsoft Yahei']
