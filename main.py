@@ -450,7 +450,8 @@ def init_session_state():
         'time_col': None,
         "id_col":None,
         'group_func1_submitter': False,
-        'shap_group_submitter': None
+        'shap_group_submitter': None,
+        "model_metric_submitter":None
     }
     
     for key, value in initial_states.items():
